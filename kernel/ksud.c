@@ -463,7 +463,8 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
         return 0;
     }
 
-    if (strcmp(dpath, "/system/etc/init/hw/init.rc")) {
+    if (!!strcmp(dpath, "/init.rc") &&
+        !!strcmp(dpath, "/system/etc/init/hw/init.rc")) {
         return 0;
     }
 
@@ -477,7 +478,7 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
     rc_hooked = true;
 
     // now we can sure that the init process is reading
-    // `/system/etc/init/init.rc`
+    // `/init.rc` or `/system/etc/init/atrace.rc`
     count = *count_ptr;
 
     pr_info("vfs_read: %s, comm: %s, count: %zu, rc_count: %zu\n", dpath,
