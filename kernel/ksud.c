@@ -9,6 +9,7 @@
 #include <linux/fs.h>
 #include <linux/version.h>
 #include <linux/input.h>
+#include <linux/kthread.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) &&                          \
     LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 #include <linux/sched/task.h>
@@ -560,12 +561,10 @@ static void vol_detector_event(struct input_handle *handle, unsigned int type,
     volumedown_pressed_count += 1;
     pr_info("volumedown_pressed_count: %d\n", volumedown_pressed_count);
 
-    // yeah this fucks up, seems unreg in the same context is an issue
-    // but then again, tehres no need to unreg here, just let on_post_fs_data do it
-    //if (volume_pressed_count >= 3) {
-    //	pr_info("KEY_VOLUMEDOWN pressed max times, safe mode detected!\n");
-    //	stop_input_hook();
-    //}
+    if (is_volumedown_enough(volumedown_pressed_count)) {
+        pr_info("volumedown pressed max times, safe mode detected!\n");
+        stop_input_hook();
+    }
 }
 
 static int vol_detector_connect(struct input_handler *handler,
@@ -640,10 +639,21 @@ static int vol_detector_init()
     return input_register_handler(&vol_detector_handler);
 }
 
-static void vol_detector_exit()
+static void vol_detector_exit_fn()
 {
     pr_info("vol_detector: exit\n");
     input_unregister_handler(&vol_detector_handler);
+}
+
+static struct task_struct *unregister_input_kthr = NULL;
+static void vol_detector_exit()
+{
+    unregister_input_kthr =
+        kthread_run(vol_detector_exit_fn, NULL, "unreg_input");
+    if (IS_ERR(unregister_input_kthr)) {
+        unregister_input_kthr = NULL;
+        return;
+    }
 }
 #endif
 
@@ -831,9 +841,6 @@ void ksu_ksud_exit(void)
     // this should be done before unregister vfs_read_kp
     // unregister_kprobe(&vfs_read_kp);
     unregister_kprobe(&input_event_kp);
-#endif
-#ifdef CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK
-    vol_detector_exit();
 #endif
     is_boot_phase = false;
     volumedown_pressed_count = 0;
